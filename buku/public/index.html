@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buku Pemasukan & Pembendaharaan</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-book"></i> Buku Pemasukan & Pembendaharaan</h1>
+            <p class="subtitle">Sistem Pencatatan Keuangan dengan Iuran Anggota</p>
+        </header>
+
+        <div class="dashboard">
+            <div class="card saldo">
+                <h3><i class="fas fa-wallet"></i> Saldo Kas</h3>
+                <p class="amount" id="saldo">Rp 0</p>
+            </div>
+            <div class="card pemasukan">
+                <h3><i class="fas fa-arrow-down"></i> Total Pemasukan</h3>
+                <p class="amount" id="total-pemasukan">Rp 0</p>
+            </div>
+            <div class="card pengeluaran">
+                <h3><i class="fas fa-arrow-up"></i> Total Pengeluaran</h3>
+                <p class="amount" id="total-pengeluaran">Rp 0</p>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="sidebar">
+                <div class="form-section">
+                    <h3><i class="fas fa-plus-circle"></i> Tambah Transaksi</h3>
+                    
+                    <div class="tabs">
+                        <button class="tab-btn active" data-tab="pemasukan">Pemasukan</button>
+                        <button class="tab-btn" data-tab="pengeluaran">Pengeluaran</button>
+                        <button class="tab-btn" data-tab="iuran">Iuran Mingguan</button>
+                    </div>
+                    
+                    <div class="tab-content">
+                        <!-- Form Pemasukan -->
+                        <form id="form-pemasukan" class="form active" enctype="multipart/form-data">
+                            <input type="hidden" name="type" value="pemasukan">
+                            <div class="form-group">
+                                <label for="pemasukan-deskripsi">Deskripsi:</label>
+                                <input type="text" id="pemasukan-deskripsi" name="deskripsi" placeholder="Contoh: Donasi acara" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="pemasukan-jumlah">Jumlah (Rp):</label>
+                                <input type="number" id="pemasukan-jumlah" name="jumlah" placeholder="100000" min="0" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="pemasukan-tanggal">Tanggal:</label>
+                                <input type="date" id="pemasukan-tanggal" name="tanggal" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="pemasukan-foto">Foto Bukti (Opsional):</label>
+                                <input type="file" id="pemasukan-foto" name="foto" accept="image/*">
+                            </div>
+                            <button type="submit" class="btn-submit">
+                                <i class="fas fa-save"></i> Simpan Pemasukan
+                            </button>
+                        </form>
+                        
+                        <!-- Form Pengeluaran -->
+                        <form id="form-pengeluaran" class="form" enctype="multipart/form-data">
+                            <input type="hidden" name="type" value="pengeluaran">
+                            <div class="form-group">
+                                <label for="pengeluaran-deskripsi">Deskripsi:</label>
+                                <input type="text" id="pengeluaran-deskripsi" name="deskripsi" placeholder="Contoh: Pembelian alat tulis" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="pengeluaran-jumlah">Jumlah (Rp):</label>
+                                <input type="number" id="pengeluaran-jumlah" name="jumlah" placeholder="50000" min="0" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="pengeluaran-tanggal">Tanggal:</label>
+                                <input type="date" id="pengeluaran-tanggal" name="tanggal" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="pengeluaran-foto">Foto Resi (Opsional):</label>
+                                <input type="file" id="pengeluaran-foto" name="foto" accept="image/*">
+                            </div>
+                            <button type="submit" class="btn-submit">
+                                <i class="fas fa-save"></i> Simpan Pengeluaran
+                            </button>
+                        </form>
+                        
+                        <!-- Form Iuran Mingguan -->
+                        <form id="form-iuran" class="form" enctype="multipart/form-data">
+                            <input type="hidden" name="type" value="iuran">
+                            <div class="form-group">
+                                <label for="iuran-minggu">Minggu Ke-:</label>
+                                <input type="number" id="iuran-minggu" name="minggu" placeholder="1" min="1" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="iuran-tanggal">Tanggal:</label>
+                                <input type="date" id="iuran-tanggal" name="tanggal" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Status Iuran Anggota:</label>
+                                <div class="anggota-list">
+                                    <div class="anggota-item">
+                                        <input type="checkbox" id="anggota1" name="anggota[]" value="Anggota 1" checked>
+                                        <label for="anggota1">Reza</label>
+                                    </div>
+                                    <div class="anggota-item">
+                                        <input type="checkbox" id="anggota2" name="anggota[]" value="Anggota 2" checked>
+                                        <label for="anggota2">Dimas</label>
+                                    </div>
+                                    <div class="anggota-item">
+                                        <input type="checkbox" id="anggota3" name="anggota[]" value="Anggota 3" checked>
+                                        <label for="anggota3">Kifli</label>
+                                    </div>
+                                    <div class="anggota-item">
+                                        <input type="checkbox" id="anggota4" name="anggota[]" value="Anggota 4" checked>
+                                        <label for="anggota4">Faiz</label>
+                                    </div>
+                                    <div class="anggota-item">
+                                        <input type="checkbox" id="anggota5" name="anggota[]" value="Anggota 5" checked>
+                                        <label for="anggota5">Fardhan</label>
+                                    </div>
+                                </div>
+                                <p class="info-text">Iuran per anggota: Rp 10.000/minggu</p>
+                            </div>
+                            <div class="form-group">
+                                <label for="iuran-catatan">Catatan:</label>
+                                <textarea id="iuran-catatan" name="catatan" placeholder="Catatan tambahan..."></textarea>
+                            </div>
+                            <button type="submit" class="btn-submit">
+                                <i class="fas fa-users"></i> Simpan Iuran Mingguan
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                
+                <div class="export-section">
+                    <h3><i class="fas fa-file-export"></i> Ekspor Data</h3>
+                    <div class="export-buttons">
+                        <button id="export-google-sheet" class="export-btn">
+                            <i class="fab fa-google"></i> Ekspor ke Google Sheets
+                        </button>
+                        <button id="export-zip" class="export-btn">
+                            <i class="fas fa-file-archive"></i> Ekspor ke ZIP (dengan foto)
+                        </button>
+                    </div>
+                    <div class="note">
+                        <p><strong>Catatan:</strong> Ekspor ke Google Sheets akan menghasilkan file CSV yang bisa diimpor ke Google Sheets.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="content">
+                <div class="content-header">
+                    <h2><i class="fas fa-history"></i> Riwayat Transaksi</h2>
+                    <div class="filter">
+                        <select id="filter-type">
+                            <option value="semua">Semua Transaksi</option>
+                            <option value="pemasukan">Pemasukan</option>
+                            <option value="pengeluaran">Pengeluaran</option>
+                            <option value="iuran">Iuran Mingguan</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="table-container">
+                    <table id="transaksi-table">
+                        <thead>
+                            <tr>
+                                <th>Tanggal</th>
+                                <th>Jenis</th>
+                                <th>Deskripsi</th>
+                                <th>Jumlah</th>
+                                <th>Bukti</th>
+                                <th>Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="transaksi-body">
+                            <!-- Data transaksi akan dimuat di sini -->
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="iuran-section">
+                    <h3><i class="fas fa-calendar-week"></i> Catatan Iuran Mingguan</h3>
+                    <div class="table-container">
+                        <table id="iuran-table">
+                            <thead>
+                                <tr>
+                                    <th>Minggu Ke-</th>
+                                    <th>Tanggal</th>
+                                    <th>Jumlah Anggota</th>
+                                    <th>Total Iuran</th>
+                                    <th>Catatan</th>
+                                </tr>
+                            </thead>
+                            <tbody id="iuran-body">
+                                <!-- Data iuran akan dimuat di sini -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <footer>
+            <p>Sistem Buku Pemasukan & Pembendaharaan &copy; 2023 | Dibuat untuk 5 anggota dengan iuran Rp 10.000/minggu</p>
+        </footer>
+    </div>
+
+    <!-- Modal untuk melihat foto -->
+    <div id="foto-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h3>Bukti Foto</h3>
+            <div id="modal-foto-container">
+                <p>Tidak ada foto tersedia.</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
