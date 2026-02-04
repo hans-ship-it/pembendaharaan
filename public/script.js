@@ -1,41 +1,16 @@
-// Konfigurasi Firebase
-const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_PROJECT_ID.appspot.com",
-    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-    appId: "YOUR_APP_ID"
-};
-
-// Inisialisasi Firebase
-const app = firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
-const storage = firebase.storage();
-
-// Data untuk simulasi (fallback ke localStorage jika Firebase gagal)
+// Data contoh untuk simulasi
 let transaksiData = JSON.parse(localStorage.getItem('transaksiData')) || [];
 let iuranData = JSON.parse(localStorage.getItem('iuranData')) || [];
-let useFirebase = false;
+let currentDomain = window.location.origin;
 
 // Inisialisasi halaman
-document.addEventListener('DOMContentLoaded', async function() {
+document.addEventListener('DOMContentLoaded', function() {
     initDate();
-    
-    try {
-        // Coba koneksi ke Firebase
-        await db.collection('test').doc('test').get();
-        useFirebase = true;
-        console.log('Firebase terhubung');
-        await loadDataFromFirebase();
-    } catch (error) {
-        console.log('Menggunakan localStorage:', error.message);
-        await loadDataFromLocalStorage();
-    }
-    
+    loadTransaksi();
+    loadIuran();
     updateDashboard();
     
-    // Event listeners
+    // Event listeners untuk tabs
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', function() {
             const tabId = this.getAttribute('data-tab');
@@ -43,14 +18,19 @@ document.addEventListener('DOMContentLoaded', async function() {
         });
     });
     
+    // Event listeners untuk form
     document.getElementById('form-pemasukan').addEventListener('submit', handleFormSubmit);
     document.getElementById('form-pengeluaran').addEventListener('submit', handleFormSubmit);
     document.getElementById('form-iuran').addEventListener('submit', handleFormIuran);
     
+    // Event listener untuk filter
     document.getElementById('filter-type').addEventListener('change', filterTransaksi);
+    
+    // Event listeners untuk ekspor
     document.getElementById('export-google-sheet').addEventListener('click', exportToGoogleSheets);
     document.getElementById('export-zip').addEventListener('click', exportToZip);
     
+    // Event listener untuk modal
     document.querySelector('.close').addEventListener('click', closeModal);
     window.addEventListener('click', function(event) {
         const modal = document.getElementById('foto-modal');
@@ -58,6 +38,9 @@ document.addEventListener('DOMContentLoaded', async function() {
             closeModal();
         }
     });
+    
+    // Test koneksi ke API
+    testApiConnection();
 });
 
 // Inisialisasi tanggal input
@@ -70,18 +53,20 @@ function initDate() {
 
 // Fungsi untuk beralih tab
 function switchTab(tabId) {
+    // Update tab aktif
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.classList.remove('active');
     });
     document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
     
+    // Update form aktif
     document.querySelectorAll('.form').forEach(form => {
         form.classList.remove('active');
     });
     document.getElementById(`form-${tabId}`).classList.add('active');
 }
 
-// Handle submit form dengan Firebase Storage
+// Handle submit form pemasukan/pengeluaran dengan upload foto
 async function handleFormSubmit(e) {
     e.preventDefault();
     
@@ -96,22 +81,28 @@ async function handleFormSubmit(e) {
     let fotoName = null;
     let fotoUrl = null;
     
-    // Upload foto ke Firebase Storage jika ada
+    // Upload foto jika ada
     if (fotoFile && fotoFile.size > 0) {
         try {
-            const uploadResult = await uploadFotoToFirebase(fotoFile, deskripsi, type);
-            fotoName = uploadResult.fileName;
-            fotoUrl = uploadResult.downloadURL;
-            showNotification('Foto berhasil diupload ke cloud', 'success');
+            const uploadResult = await uploadFoto(fotoFile, deskripsi, type);
+            if (uploadResult.success) {
+                fotoName = uploadResult.fileName;
+                fotoUrl = uploadResult.fileUrl;
+                showNotification('Foto berhasil diupload', 'success');
+            } else {
+                showNotification('Gagal mengupload foto: ' + uploadResult.message, 'error');
+                // Lanjutkan tanpa foto
+            }
         } catch (error) {
             console.error('Error uploading foto:', error);
             showNotification('Gagal mengupload foto: ' + error.message, 'error');
+            // Lanjutkan tanpa foto
         }
     }
     
     // Simpan data transaksi
     const transaksi = {
-        id: Date.now().toString(),
+        id: Date.now(),
         type: type,
         deskripsi: deskripsi,
         jumlah: jumlah,
@@ -121,27 +112,23 @@ async function handleFormSubmit(e) {
         createdAt: new Date().toISOString()
     };
     
-    // Simpan ke Firebase atau localStorage
-    if (useFirebase) {
-        await saveTransaksiToFirebase(transaksi);
-    } else {
-        transaksiData.push(transaksi);
-        saveToLocalStorage();
-    }
+    transaksiData.push(transaksi);
+    saveToLocalStorage();
     
     // Reset form
     form.reset();
     initDate();
     
     // Reload data
-    await loadData();
+    loadTransaksi();
     updateDashboard();
     
+    // Tampilkan notifikasi
     showNotification(`${type === 'pemasukan' ? 'Pemasukan' : 'Pengeluaran'} berhasil ditambahkan!`, 'success');
 }
 
 // Handle submit form iuran
-async function handleFormIuran(e) {
+function handleFormIuran(e) {
     e.preventDefault();
     
     const formData = new FormData(this);
@@ -156,7 +143,7 @@ async function handleFormIuran(e) {
     
     // Simpan data iuran
     const iuran = {
-        id: Date.now().toString(),
+        id: Date.now(),
         minggu: parseInt(minggu),
         tanggal: tanggal,
         anggota: anggota,
@@ -166,9 +153,12 @@ async function handleFormIuran(e) {
         createdAt: new Date().toISOString()
     };
     
+    iuranData.push(iuran);
+    saveToLocalStorage();
+    
     // Juga simpan sebagai transaksi pemasukan
     const transaksi = {
-        id: (Date.now() + 1).toString(),
+        id: Date.now() + 1,
         type: 'iuran',
         deskripsi: `Iuran minggu ke-${minggu} (${jumlahAnggota} anggota)`,
         jumlah: totalIuran,
@@ -179,15 +169,8 @@ async function handleFormIuran(e) {
         iuranId: iuran.id
     };
     
-    // Simpan ke Firebase atau localStorage
-    if (useFirebase) {
-        await saveIuranToFirebase(iuran);
-        await saveTransaksiToFirebase(transaksi);
-    } else {
-        iuranData.push(iuran);
-        transaksiData.push(transaksi);
-        saveToLocalStorage();
-    }
+    transaksiData.push(transaksi);
+    saveToLocalStorage();
     
     // Reset form
     this.reset();
@@ -199,96 +182,40 @@ async function handleFormIuran(e) {
     });
     
     // Reload data
-    await loadData();
+    loadTransaksi();
+    loadIuran();
     updateDashboard();
     
+    // Tampilkan notifikasi
     showNotification(`Iuran minggu ke-${minggu} berhasil dicatat! Total: Rp ${totalIuran.toLocaleString('id-ID')}`, 'success');
 }
 
-// Upload foto ke Firebase Storage
-async function uploadFotoToFirebase(file, deskripsi, type) {
-    return new Promise((resolve, reject) => {
-        // Buat nama file unik
-        const timestamp = Date.now();
-        const cleanDeskripsi = deskripsi.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-        const fileName = `${type}_${timestamp}_${cleanDeskripsi}.${file.name.split('.').pop()}`;
-        
-        // Upload ke Firebase Storage
-        const storageRef = storage.ref();
-        const fotoRef = storageRef.child('bukti_transaksi/' + fileName);
-        
-        fotoRef.put(file).then((snapshot) => {
-            snapshot.ref.getDownloadURL().then((downloadURL) => {
-                resolve({
-                    fileName: fileName,
-                    downloadURL: downloadURL
-                });
-            }).catch(reject);
-        }).catch(reject);
-    });
-}
-
-// Simpan transaksi ke Firestore
-async function saveTransaksiToFirebase(transaksi) {
+// Upload foto ke server Vercel
+async function uploadFoto(file, deskripsi, type) {
+    const formData = new FormData();
+    formData.append('foto', file);
+    formData.append('deskripsi', deskripsi);
+    formData.append('type', type);
+    
     try {
-        await db.collection('transaksi').doc(transaksi.id).set(transaksi);
-        return true;
-    } catch (error) {
-        console.error('Error saving to Firebase:', error);
-        throw error;
-    }
-}
-
-// Simpan iuran ke Firestore
-async function saveIuranToFirebase(iuran) {
-    try {
-        await db.collection('iuran').doc(iuran.id).set(iuran);
-        return true;
-    } catch (error) {
-        console.error('Error saving to Firebase:', error);
-        throw error;
-    }
-}
-
-// Load data dari Firebase
-async function loadDataFromFirebase() {
-    try {
-        // Load transaksi
-        const transaksiSnapshot = await db.collection('transaksi').get();
-        transaksiData = [];
-        transaksiSnapshot.forEach(doc => {
-            transaksiData.push(doc.data());
+        // Gunakan path /api/upload.php untuk Vercel
+        const response = await fetch('/api/upload.php', {
+            method: 'POST',
+            body: formData
         });
         
-        // Load iuran
-        const iuranSnapshot = await db.collection('iuran').get();
-        iuranData = [];
-        iuranSnapshot.forEach(doc => {
-            iuranData.push(doc.data());
-        });
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
         
-        loadTransaksi();
-        loadIuran();
+        const result = await response.json();
+        return result;
     } catch (error) {
-        console.error('Error loading from Firebase:', error);
-        throw error;
-    }
-}
-
-// Load data dari localStorage
-async function loadDataFromLocalStorage() {
-    transaksiData = JSON.parse(localStorage.getItem('transaksiData')) || [];
-    iuranData = JSON.parse(localStorage.getItem('iuranData')) || [];
-    loadTransaksi();
-    loadIuran();
-}
-
-// Load data (otomatis pilih sumber)
-async function loadData() {
-    if (useFirebase) {
-        await loadDataFromFirebase();
-    } else {
-        await loadDataFromLocalStorage();
+        console.error('Upload error:', error);
+        return { 
+            success: false, 
+            message: 'Gagal terhubung ke server. Pastikan Anda telah mengupload file PHP ke folder /api/' 
+        };
     }
 }
 
@@ -347,8 +274,8 @@ function loadTransaksi() {
         
         // Tombol foto
         let fotoButton = '<button class="foto-btn" disabled><i class="fas fa-image"></i> Tidak ada</button>';
-        if (transaksi.fotoUrl) {
-            fotoButton = `<button class="foto-btn" onclick="viewFoto('${transaksi.fotoName}', '${transaksi.fotoUrl}')">
+        if (transaksi.fotoName) {
+            fotoButton = `<button class="foto-btn" onclick="viewFoto('${transaksi.fotoName}', '${transaksi.fotoUrl || ''}')">
                 <i class="fas fa-image"></i> Lihat
             </button>`;
         }
@@ -360,7 +287,7 @@ function loadTransaksi() {
             <td>${formattedJumlah}</td>
             <td>${fotoButton}</td>
             <td>
-                <button class="delete-btn" onclick="deleteTransaksi('${transaksi.id}')">
+                <button class="delete-btn" onclick="deleteTransaksi(${transaksi.id})">
                     <i class="fas fa-trash"></i> Hapus
                 </button>
             </td>
@@ -484,67 +411,76 @@ async function deleteTransaksi(id) {
         // Cari transaksi
         const transaksi = transaksiData.find(t => t.id === id);
         
-        // Hapus foto dari Firebase Storage jika ada
-        if (transaksi && transaksi.fotoUrl && useFirebase) {
+        // Hapus foto dari server jika ada
+        if (transaksi && transaksi.fotoName) {
             try {
-                await deleteFotoFromFirebase(transaksi.fotoName);
+                await deleteFoto(transaksi.fotoName);
+                showNotification('Foto berhasil dihapus dari server', 'info');
             } catch (error) {
                 console.error('Error deleting photo:', error);
+                showNotification('Gagal menghapus foto dari server', 'error');
             }
         }
         
         // Cari apakah ini transaksi iuran
         if (transaksi && transaksi.type === 'iuran' && transaksi.iuranId) {
             // Hapus juga data iuran terkait
-            if (useFirebase) {
-                await db.collection('iuran').doc(transaksi.iuranId).delete();
-            } else {
-                iuranData = iuranData.filter(i => i.id !== transaksi.iuranId);
-            }
+            iuranData = iuranData.filter(i => i.id !== transaksi.iuranId);
         }
         
         // Hapus transaksi
-        if (useFirebase) {
-            await db.collection('transaksi').doc(id).delete();
-        } else {
-            transaksiData = transaksiData.filter(t => t.id !== id);
-            saveToLocalStorage();
-        }
+        transaksiData = transaksiData.filter(t => t.id !== id);
+        saveToLocalStorage();
         
         // Reload data
-        await loadData();
+        loadTransaksi();
+        loadIuran();
         updateDashboard();
         
+        // Tampilkan notifikasi
         showNotification('Transaksi berhasil dihapus!', 'success');
     }
 }
 
-// Hapus foto dari Firebase Storage
-async function deleteFotoFromFirebase(fileName) {
+// Hapus foto dari server
+async function deleteFoto(fileName) {
     try {
-        const storageRef = storage.ref();
-        const fotoRef = storageRef.child('bukti_transaksi/' + fileName);
-        await fotoRef.delete();
-        return { success: true };
+        const response = await fetch('/api/delete_photo.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ fileName: fileName })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        return result;
     } catch (error) {
-        console.error('Error deleting photo from Firebase:', error);
+        console.error('Delete photo error:', error);
         throw error;
     }
 }
 
-// Lihat foto
+// Lihat foto (yang sebenarnya)
 function viewFoto(namaFile, fotoUrl) {
     const modal = document.getElementById('foto-modal');
     const container = document.getElementById('modal-foto-container');
     
+    // Gunakan URL yang disimpan atau buat URL baru
+    const photoUrl = fotoUrl || `/uploads/${encodeURIComponent(namaFile)}`;
+    
     container.innerHTML = `
         <div style="text-align: center;">
             <p><strong>Nama file:</strong> ${namaFile}</p>
-            <img src="${fotoUrl}" alt="Bukti Transaksi" style="max-width: 100%; max-height: 400px; border-radius: 5px; margin: 10px 0;" 
-                 onerror="this.onerror=null; this.src='https://via.placeholder.com/600x400/3498db/ffffff?text=Foto+Tidak+Dapat+Dimuat'">
-            <p class="info-text" style="margin-top: 15px; color: #666;">Foto bukti transaksi dari cloud storage.</p>
+            <img src="${photoUrl}" alt="Bukti Transaksi" style="max-width: 100%; max-height: 400px; border-radius: 5px; margin: 10px 0;" 
+                 onerror="this.onerror=null; this.src='https://via.placeholder.com/600x400/3498db/ffffff?text=Foto+Tidak+Ditemukan'">
+            <p class="info-text" style="margin-top: 15px; color: #666;">Foto bukti transaksi.</p>
             <div style="margin-top: 20px;">
-                <button onclick="downloadSinglePhoto('${namaFile}', '${fotoUrl}')" class="foto-btn" style="padding: 10px 20px; font-size: 16px;">
+                <button onclick="downloadSinglePhoto('${namaFile}')" class="foto-btn" style="padding: 10px 20px; font-size: 16px;">
                     <i class="fas fa-download"></i> Download Foto Ini
                 </button>
             </div>
@@ -555,11 +491,25 @@ function viewFoto(namaFile, fotoUrl) {
 }
 
 // Download foto tunggal
-function downloadSinglePhoto(fileName, url) {
+function downloadSinglePhoto(fileName) {
+    // Coba beberapa path yang mungkin
+    const possiblePaths = [
+        `/uploads/${encodeURIComponent(fileName)}`,
+        `${currentDomain}/uploads/${encodeURIComponent(fileName)}`,
+        fileName.startsWith('http') ? fileName : `${currentDomain}/api/get_photo.php?file=${encodeURIComponent(fileName)}`
+    ];
+    
     const link = document.createElement('a');
-    link.href = url;
     link.download = fileName;
+    
+    // Coba path pertama
+    link.href = possiblePaths[0];
     link.click();
+    
+    // Fallback: buka di tab baru jika tidak berhasil
+    setTimeout(() => {
+        window.open(possiblePaths[1], '_blank');
+    }, 100);
 }
 
 // Tutup modal
@@ -616,12 +566,11 @@ function exportToGoogleSheets() {
     allData.push(['Saldo Kas', '', '', formatRupiah(saldo).replace('Rp', '').trim()]);
     allData.push(['Total Pemasukan', '', '', formatRupiah(totalPemasukan).replace('Rp', '').trim()]);
     allData.push(['Total Pengeluaran', '', '', formatRupiah(totalPengeluaran).replace('Rp', '').trim()]);
-    allData.push(['Jumlah Transaksi', '', '', transaksiData.length]);
-    allData.push(['Jumlah Iuran Mingguan', '', '', iuranData.length]);
     
     // Konversi ke CSV
     const csvContent = allData.map(row => 
         row.map(cell => {
+            // Escape quotes dan wrap dalam quotes jika mengandung koma
             const cellStr = String(cell);
             if (cellStr.includes(',') || cellStr.includes('"') || cellStr.includes('\n')) {
                 return '"' + cellStr.replace(/"/g, '""') + '"';
@@ -646,73 +595,52 @@ function exportToGoogleSheets() {
     showNotification('File CSV berhasil diunduh. Impor ke Google Sheets untuk melihat data.', 'success');
 }
 
-// Ekspor ke ZIP dengan foto (menggunakan JSZip di client-side)
+// Ekspor ke ZIP dengan foto
 async function exportToZip() {
     showNotification('Menyiapkan file ZIP dengan foto...', 'info');
     
     try {
-        // Load JSZip dari CDN jika belum ada
-        if (typeof JSZip === 'undefined') {
-            await loadJSZip();
+        // Panggil API untuk membuat ZIP
+        const response = await fetch('/api/download.php?action=create_zip');
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
         }
         
-        const zip = new JSZip();
-        const folder = zip.folder("laporan_keuangan");
+        const result = await response.json();
         
-        // Buat file CSV
-        const csvData = generateCSVData();
-        folder.file("laporan.csv", csvData);
-        
-        // Buat file summary
-        const summaryData = generateSummaryData();
-        folder.file("ringkasan.txt", summaryData);
-        
-        // Tambahkan foto-foto dari Firebase Storage
-        const fotoFolder = folder.folder("foto_bukti");
-        const transaksiDenganFoto = transaksiData.filter(t => t.fotoUrl);
-        
-        if (transaksiDenganFoto.length > 0) {
-            showNotification(`Mengunduh ${transaksiDenganFoto.length} foto...`, 'info');
+        if (result.success) {
+            // Download file ZIP
+            const link = document.createElement('a');
+            link.href = result.downloadUrl;
+            link.download = result.zipFile;
             
-            // Download dan tambahkan setiap foto
-            for (const transaksi of transaksiDenganFoto) {
-                try {
-                    const response = await fetch(transaksi.fotoUrl);
-                    const blob = await response.blob();
-                    
-                    // Buat nama file yang lebih baik
-                    const cleanDeskripsi = transaksi.deskripsi.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-                    const fileName = `${transaksi.tanggal}_${cleanDeskripsi}.${transaksi.fotoName.split('.').pop()}`;
-                    
-                    fotoFolder.file(fileName, blob);
-                } catch (error) {
-                    console.error('Error downloading foto:', error);
+            // Tambahkan event listener untuk mengetahui kapan download selesai
+            link.addEventListener('click', () => {
+                setTimeout(() => {
+                    showNotification('File ZIP berhasil dibuat dan diunduh!', 'success');
+                }, 1000);
+            });
+            
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+        } else {
+            showNotification('Gagal membuat file ZIP: ' + result.message, 'error');
+            
+            // Fallback: unduh CSV saja
+            setTimeout(() => {
+                if (confirm('Gagal membuat ZIP. Ingin mengunduh file CSV saja?')) {
+                    exportToGoogleSheets();
                 }
-            }
+            }, 1000);
         }
-        
-        // Generate ZIP
-        const zipBlob = await zip.generateAsync({ type: "blob" });
-        
-        // Download ZIP
-        const link = document.createElement('a');
-        const url = URL.createObjectURL(zipBlob);
-        const fileName = `laporan_keuangan_${new Date().toISOString().split('T')[0]}.zip`;
-        
-        link.href = url;
-        link.download = fileName;
-        link.click();
-        
-        // Bersihkan
-        URL.revokeObjectURL(url);
-        
-        showNotification(`File ZIP berhasil dibuat dengan ${transaksiDenganFoto.length} foto!`, 'success');
-        
     } catch (error) {
-        console.error('Error creating ZIP:', error);
-        showNotification('Gagal membuat file ZIP: ' + error.message, 'error');
+        console.error('Export ZIP error:', error);
+        showNotification('Gagal membuat file ZIP. Server PHP mungkin tidak tersedia.', 'error');
         
-        // Fallback ke CSV saja
+        // Fallback otomatis ke CSV
         setTimeout(() => {
             showNotification('Mengunduh file CSV sebagai alternatif...', 'info');
             exportToGoogleSheets();
@@ -720,71 +648,31 @@ async function exportToZip() {
     }
 }
 
-// Load JSZip dari CDN
-async function loadJSZip() {
-    return new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
-        script.onload = resolve;
-        script.onerror = reject;
-        document.head.appendChild(script);
-    });
-}
-
-// Generate CSV data
-function generateCSVData() {
-    let csv = "TANGGAL,JENIS,DESKRIPSI,JUMLAH (Rp),BUKTI FOTO\n";
-    
-    transaksiData.forEach(t => {
-        const jenis = t.type === 'pemasukan' ? 'PEMASUKAN' : 
-                     t.type === 'pengeluaran' ? 'PENGELUARAN' : 'IURAN';
-        csv += `${t.tanggal},${jenis},"${t.deskripsi}",${t.jumlah},${t.fotoName || '-'}\n`;
-    });
-    
-    return csv;
-}
-
-// Generate summary data
-function generateSummaryData() {
-    const totalPemasukan = transaksiData
-        .filter(t => t.type === 'pemasukan' || t.type === 'iuran')
-        .reduce((sum, t) => sum + t.jumlah, 0);
-    
-    const totalPengeluaran = transaksiData
-        .filter(t => t.type === 'pengeluaran')
-        .reduce((sum, t) => sum + t.jumlah, 0);
-    
-    const saldo = totalPemasukan - totalPengeluaran;
-    
-    return `LAPORAN KEUANGAN
-Tanggal Ekspor: ${new Date().toLocaleDateString('id-ID')}
-
-SALDO KAS: Rp ${saldo.toLocaleString('id-ID')}
-TOTAL PEMASUKAN: Rp ${totalPemasukan.toLocaleString('id-ID')}
-TOTAL PENGELUARAN: Rp ${totalPengeluaran.toLocaleString('id-ID')}
-
-JUMLAH TRANSAKSI: ${transaksiData.length}
-JUMLAH FOTO BUKTI: ${transaksiData.filter(t => t.fotoUrl).length}
-JUMLAH CATATAN IURAN: ${iuranData.length}
-
-SISTEM IURAN:
-- Iuran per anggota: Rp 10.000/minggu
-- Total anggota: 5 orang
-- Sistem pencatatan per minggu
-
-Catatan:
-1. File ini berisi data keuangan yang diekspor dari sistem.
-2. Foto bukti disimpan dalam folder 'foto_bukti'.
-3. Data tersimpan di cloud storage (Firebase).`;
+// Test koneksi ke API
+async function testApiConnection() {
+    try {
+        const response = await fetch('/api/');
+        if (response.ok) {
+            console.log('API terhubung dengan baik');
+        } else {
+            console.warn('API tidak merespons dengan baik');
+            showNotification('Server PHP tidak aktif. Fitur upload foto dan ZIP mungkin tidak berfungsi.', 'warning');
+        }
+    } catch (error) {
+        console.warn('Tidak dapat terhubung ke API:', error);
+        // Tidak perlu menampilkan notifikasi karena mungkin dijalankan secara lokal
+    }
 }
 
 // Tampilkan notifikasi
 function showNotification(message, type) {
+    // Hapus notifikasi sebelumnya jika ada
     const existingNotification = document.querySelector('.notification');
     if (existingNotification) {
         existingNotification.remove();
     }
     
+    // Buat elemen notifikasi
     const notification = document.createElement('div');
     notification.className = `notification ${type}`;
     notification.innerHTML = `
@@ -795,12 +683,15 @@ function showNotification(message, type) {
         <span>${message}</span>
     `;
     
+    // Tambahkan ke body
     document.body.appendChild(notification);
     
+    // Tampilkan
     setTimeout(() => {
         notification.classList.add('show');
     }, 10);
     
+    // Sembunyikan setelah beberapa detik
     let duration = 3000;
     if (type === 'info') duration = 4000;
     if (type === 'warning') duration = 5000;
@@ -814,6 +705,7 @@ function showNotification(message, type) {
         }, 300);
     }, duration);
     
+    // Tambahkan style untuk notifikasi jika belum ada
     if (!document.querySelector('#notification-style')) {
         const style = document.createElement('style');
         style.id = 'notification-style';
@@ -858,4 +750,63 @@ function showNotification(message, type) {
         `;
         document.head.appendChild(style);
     }
+}
+
+// Fungsi tambahan untuk debugging
+function debugInfo() {
+    console.log('Transaksi Data:', transaksiData);
+    console.log('Iuran Data:', iuranData);
+    console.log('Current Domain:', currentDomain);
+    console.log('LocalStorage transaksiData:', localStorage.getItem('transaksiData'));
+    console.log('LocalStorage iuranData:', localStorage.getItem('iuranData'));
+}
+
+// Fungsi untuk reset data (hanya untuk development)
+function resetAllData() {
+    if (confirm('Yakin ingin menghapus semua data? Ini tidak dapat dibatalkan!')) {
+        localStorage.removeItem('transaksiData');
+        localStorage.removeItem('iuranData');
+        transaksiData = [];
+        iuranData = [];
+        loadTransaksi();
+        loadIuran();
+        updateDashboard();
+        showNotification('Semua data telah direset', 'info');
+    }
+}
+
+// Tambahkan tombol debug untuk development (opsional)
+if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    document.addEventListener('DOMContentLoaded', function() {
+        const debugBtn = document.createElement('button');
+        debugBtn.textContent = 'Debug Info';
+        debugBtn.style.position = 'fixed';
+        debugBtn.style.bottom = '10px';
+        debugBtn.style.right = '10px';
+        debugBtn.style.zIndex = '9999';
+        debugBtn.style.padding = '5px 10px';
+        debugBtn.style.backgroundColor = '#333';
+        debugBtn.style.color = 'white';
+        debugBtn.style.border = 'none';
+        debugBtn.style.borderRadius = '3px';
+        debugBtn.style.cursor = 'pointer';
+        debugBtn.onclick = debugInfo;
+        
+        const resetBtn = document.createElement('button');
+        resetBtn.textContent = 'Reset Data';
+        resetBtn.style.position = 'fixed';
+        resetBtn.style.bottom = '40px';
+        resetBtn.style.right = '10px';
+        resetBtn.style.zIndex = '9999';
+        resetBtn.style.padding = '5px 10px';
+        resetBtn.style.backgroundColor = '#e74c3c';
+        resetBtn.style.color = 'white';
+        resetBtn.style.border = 'none';
+        resetBtn.style.borderRadius = '3px';
+        resetBtn.style.cursor = 'pointer';
+        resetBtn.onclick = resetAllData;
+        
+        document.body.appendChild(debugBtn);
+        document.body.appendChild(resetBtn);
+    });
 }
